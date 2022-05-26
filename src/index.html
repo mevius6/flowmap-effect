@@ -42,12 +42,28 @@
         );
     </script>
   </head>
-  <body class="demo-1">
+  <body class="">
     <main></main>
   </body>
   <script type="text/javascript" src="js/bundle.js"></script>
   <script type="module">
-    const imgSize = [3000, 4000];
+    // const images = [1,2,3];
+    const images = [
+      {
+        url: 'img/1.jpg',
+        ar: [3000, 4000]
+      }, {
+        url: 'img/2.jpg',
+        ar: [3000, 4000]
+      }, {
+        url: 'img/3.jpg',
+        // ar: [3000, 2000],
+        ar: [1966, 1306],
+      },
+    ];
+    const lastImg = images.length - 1;
+    // const imgSize = [3000, 4000];
+    const imgSize = {w:3000, h:4000};
 
     const vertex = `
           attribute vec2 uv;
@@ -87,13 +103,28 @@
       const gl = renderer.gl;
       document.body.appendChild(gl.canvas);
 
+      // Switch images
+      document.addEventListener('click', () => {
+        images.forEach((el, i) => {
+          let img = new Image();
+          img.onload = () => (texture.image = img);
+          img.crossOrigin = "Anonymous";
+          img.src = el.url;
+          // img.src = `img/${(i != images.at(-1)) ? i+1 : 1}.jpg`;
+          imgSize.w = el.ar[0];
+          imgSize.h = el.ar[1];
+          resize();
+        });
+      }, false);
+
       // Variable inputs to control flowmap
       let aspect = 1;
       const mouse = new ogl.Vec2(-1);
       const velocity = new ogl.Vec2();
       function resize() {
         let a1, a2;
-        var imageAspect = imgSize[1] / imgSize[0];
+        // var imageAspect = imgSize[1] / imgSize[0];
+        let imageAspect = imgSize.h / imgSize.w;
         if (window.innerHeight / window.innerWidth < imageAspect) {
           a1 = 1;
           a2 = window.innerHeight / window.innerWidth / imageAspect;
@@ -124,13 +155,9 @@
         minFilter: gl.LINEAR,
         magFilter: gl.LINEAR
       });
-      const img = new Image();
-      img.onload = () => (texture.image = img);
-      img.crossOrigin = "Anonymous";
-      img.src = "img/1.jpg";
 
       let a1, a2;
-      var imageAspect = imgSize[1] / imgSize[0];
+      let imageAspect = imgSize.h / imgSize.w;
       if (window.innerHeight / window.innerWidth < imageAspect) {
         a1 = 1;
         a2 = window.innerHeight / window.innerWidth / imageAspect;
@@ -138,6 +165,13 @@
         a1 = (window.innerWidth / window.innerHeight) * imageAspect;
         a2 = 1;
       }
+
+      window.addEventListener('load', () => {
+        let img = new Image();
+        img.onload = () => (texture.image = img);
+        img.crossOrigin = "Anonymous";
+        img.src = "img/1.jpg";
+      }, false);
 
       const program = new ogl.Program(gl, {
         vertex,

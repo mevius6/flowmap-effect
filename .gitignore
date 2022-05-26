@@ -1,0 +1,7 @@
+.DS_*
+.env
+.parcel-cache/
+.vercel/
+node_modules/
+puplic/
+parcel-bundle-reports/
