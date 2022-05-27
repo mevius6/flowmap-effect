@@ -43,53 +43,39 @@
   </body>
   <script type="text/javascript" src="js/bundle.js"></script>
   <script type="module">
-    let images = [{
-      url: 'img/tex-1.jpg',
-      ar: [3000, 4000],
-    }, {
-      url: 'img/tex-2.jpg',
-      ar: [3000, 4000],
-    }, {
-      url: 'img/tex-3.jpg',
-      ar: [3000, 4000],
-    }, {
-      url: 'img/tex-4.jpg',
-      ar: [3000, 4000],
-    }], amount = images.length;
-    // const lastImg = images[images.length - 1];
-
+    // Default images aspect ratio — 3:4
     const imgSize = { w: 3000, h: 4000 };
 
     const vertex = `
-    attribute vec2 uv;
-    attribute vec2 position;
-    varying vec2 vUv;
+      attribute vec2 uv;
+      attribute vec2 position;
+      varying vec2 vUv;
 
-    void main() {
-      vUv = uv;
-      gl_Position = vec4(position, 0, 1);
-    }`;
-
+      void main() {
+        vUv = uv;
+        gl_Position = vec4(position, 0, 1);
+      }
+    `;
     const fragment = `
-    precision highp float;
-    precision highp int;
-    uniform sampler2D tWater;
-    uniform sampler2D tFlow;
-    uniform float uTime;
-    varying vec2 vUv;
-    uniform vec4 res;
+      precision highp float;
+      precision highp int;
+      uniform sampler2D tWater;
+      uniform sampler2D tFlow;
+      uniform float uTime;
+      varying vec2 vUv;
+      uniform vec4 res;
 
-    void main() {
-      // R and G values are velocity in the X and Y direction
-      // B value is the velocity length
-
-      vec3 flow = texture2D(tFlow, vUv).rgb;
-      vec2 uv = .5 * gl_FragCoord.xy / res.xy ;
-      vec2 myUV = (uv - vec2(0.5))*res.zw + vec2(0.5);
-      myUV -= flow.xy * (0.15 * 0.7);
-      vec3 tex = texture2D(tWater, myUV).rgb;
-      gl_FragColor = vec4(tex.r, tex.g, tex.b, 1.0);
-    }`;
+      void main() {
+        // R and G values are velocity in the X and Y direction
+        // B value is the velocity length
+        vec3 flow = texture2D(tFlow, vUv).rgb;
+        vec2 uv = .5 * gl_FragCoord.xy / res.xy ;
+        vec2 myUV = (uv - vec2(0.5))*res.zw + vec2(0.5);
+        myUV -= flow.xy * (0.15 * 0.7);
+        vec3 tex = texture2D(tWater, myUV).rgb;
+        gl_FragColor = vec4(tex.r, tex.g, tex.b, 1.0);
+      }
+    `;
 
     {
       const renderer = new ogl.Renderer({ dpr: 2 });
@@ -127,45 +113,68 @@
         a2 = 1;
       }
 
-      // Switch images
-      // 1. If adjusting the aspect ratio of the images is required
-      // 2. If the images have the equal aspect ratio
+      let images = [{
+        url: 'img/tex-1.jpg',
+        ar: [3000, 4000],
+      }, {
+        url: 'img/tex-2.jpg',
+        ar: [3000, 4000],
+      }, {
+        url: 'img/tex-3.jpg',
+        ar: [3000, 4000],
+      }, {
+        url: 'img/tex-4.jpg',
+        ar: [3000, 4000],
+      }], amount = images.length;
 
-      let count = 0;
-      const onClickEvt = () => loadImage();
+      let counter = 0;
 
-      document.addEventListener('click', onClickEvt, false);
+      // Upd texture on click
+      const onClickEv = () => updTexture({equalSizes: true});
+      // Set initial image on page load
+      const onLoadEv = () => updTexture();
 
-      function loadImage(num = 0) {
-        num = count++;
+
+      // Add event listeners
+      document.addEventListener('click', onClickEv, false);
+      window.addEventListener('load', onLoadEv, false);
+
+      function updTexture(num = 0, vars = {}) {
+        // this.vars = vars || {};
+        // defaults = { equalSizes: true }
+
+        if (!vars.equalSizes) vars.equalSizes = true;
+
+        let url;
+        num = counter++;
+
+        if (vars.equalSizes) {
+          url = `img/tex-${num + 1}.jpg`;
+          if (num > amount - 1) counter = 0;
+        }
+
+        // if (vars.adjustSizes) {
+        //   images.map((val, idx, arr) => {
+        //     let lastVal = arr.length - 1;
+        //     if (num == idx) {
+        //       url = val.url;
+        //       imgSize.w = val.ar[0];
+        //       imgSize.h = val.ar[1];
+        //     } else if (num >= lastVal) count = 0;
+        //   })
+        // }
+
+        loadImage(url);
+      }
+
+      function loadImage(url) {
         let img = new Image();
-
-        // [1]
-        // let url = 'img/tex-1.jpg';
-        // images.map((val, idx, arr) => {
-        //   let lastVal = arr.length - 1;
-        //   if (num == idx) {
-        //     url = val.url;
-        //     imgSize.w = val.ar[0];
-        //     imgSize.h = val.ar[1];
-        //   } else if (num >= lastVal) count = 0;
-        // });
-
-        // [2]
-        let url = `img/tex-${num+1}.jpg`;
-        if (num > images.length -1) count = 0;
-
+        img.onload = () => (texture.image = img);
         img.crossOrigin = 'Anonymous';
         img.decoding = 'async';
         img.src = url;
-        img.onload = () => (texture.image = img);
-
-        // [1]
-        // resize();
+        // return img;
       }
-
-      // Set initial image
-      window.addEventListener('load', () => loadImage(), false);
 
       function resize() {
         let a1, a2;
