@@ -56,6 +56,7 @@
       url: 'img/tex-4.jpg',
       ar: [3000, 4000],
     }], amount = images.length;
+    // const lastImg = images[images.length - 1];
 
     const imgSize = { w: 3000, h: 4000 };
 
@@ -127,31 +128,40 @@
       }
 
       // Switch images
+      // 1. If adjusting the aspect ratio of the images is required
+      // 2. If the images have the equal aspect ratio
+
       let count = 0;
-      const onClickEvt = () => loadImage(count++);
+      const onClickEvt = () => loadImage();
 
       document.addEventListener('click', onClickEvt, false);
 
-      function loadImage(num) {
+      function loadImage(num = 0) {
+        num = count++;
         let img = new Image();
-        let url = 'img/tex-1.jpg';
 
-        images.map((val, idx, arr) => {
-          let lastVal = arr.length - 1;
-          if (num == idx) {
-            url = val.url;
-            imgSize.w = val.ar[0];
-            imgSize.h = val.ar[1];
-          } else if (num >= lastVal) count = 0;
-        });
+        // [1]
+        // let url = 'img/tex-1.jpg';
+        // images.map((val, idx, arr) => {
+        //   let lastVal = arr.length - 1;
+        //   if (num == idx) {
+        //     url = val.url;
+        //     imgSize.w = val.ar[0];
+        //     imgSize.h = val.ar[1];
+        //   } else if (num >= lastVal) count = 0;
+        // });
+
+        // [2]
+        let url = `img/tex-${num+1}.jpg`;
+        if (num > images.length -1) count = 0;
 
         img.crossOrigin = 'Anonymous';
-        // img.loading = 'lazy';
         img.decoding = 'async';
         img.src = url;
         img.onload = () => (texture.image = img);
 
-        resize();
+        // [1]
+        // resize();
       }
 
       // Set initial image
