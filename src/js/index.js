@@ -1,22 +1,22 @@
 import {
-  Renderer,
-  Program,
-  Texture,
-  Mesh,
-  Vec2,
-  Vec4,
   Flowmap,
   Geometry,
-  Triangle
+  Mesh,
+  Program,
+  Renderer,
+  Texture,
+  Triangle,
+  Vec2,
+  Vec4,
 } from 'https://cdn.skypack.dev/ogl';
 
-const win = window;
-const doc = document;
+let win = window,
+  { innerWidth: vw, innerHeight: vh } = win;
 
-const { innerWidth, innerHeight } = win;
-// const {w: innerWidth, h: innerHeight} = winSize;
+let doc = document,
+  { documentElement: root, body } = doc;
 
-const vertex = `
+const vertex = /* glsl */ `
   attribute vec2 uv;
   attribute vec2 position;
 
@@ -27,7 +27,7 @@ const vertex = `
     gl_Position = vec4(position, 0, 1);
   }
 `;
-const fragment = `
+const fragment = /* glsl */ `
   precision highp float;
   precision highp int;
 
@@ -55,7 +55,8 @@ const fragment = `
 
 const renderer = new Renderer({ dpr: 2 });
 const gl = renderer.gl;
-doc.body.appendChild(gl.canvas);
+
+body.appendChild(gl.canvas);
 
 // Variable inputs to control flowmap
 let aspect = 1;
@@ -84,95 +85,268 @@ const texture = new Texture(gl, {
   magFilter: gl.LINEAR,
 });
 
-// Default image dimensions
-const imageSize = { w: 3000, h: 4000 };
+// Default rendered dimensions of the image texture
+// w/ 3:4 (SD) aspect ratio
+const imageSize = { w: 3000, h: 4000, ar: [(3/4), (4/3)] };
 
 let a1, a2;
 let imgAspectRatio = (imageSize.h / imageSize.w);
-let winAspectRatio = (innerHeight / innerWidth);
+let winAspectRatio = (vh / vw);
 
 if (winAspectRatio < imgAspectRatio) {
   a1 = 1;
   a2 = (winAspectRatio / imgAspectRatio);
 } else {
-  a1 = (innerWidth / innerHeight) * imgAspectRatio;
+  a1 = (vw / vh) * imgAspectRatio;
   a2 = 1;
+}
+
+// Create URL to load media resource from
+const assetURL = (num = 0, struct = {}) => {
+  let assetPrefix = struct.prefix || '',
+      basePath = `${struct.path || 'images'}/`,
+      fileName = `${struct.name || 'img'}`;
+
+  let fileIndex = `${struct.index || num}`,
+      fileFormat = {
+        jpg: 'jpg',
+        jpeg: 'jpeg',
+        webp: 'webp',
+        avif: 'avif',
+      };
+
+  let suffix = struct.suffix,
+      extension = `.${fileFormat[struct.format]}`;
+
+  let url = assetPrefix + basePath + fileName + fileIndex + (suffix ? suffix + extension : extension);
+
+  return url;
 }
 
 const texturesArray = [
   {
-    url: 'images/tex0.jpg',
+    url: 'tex/img0-q80.jpg',
     ar: [3000, 4000],
   }, {
-    url: 'images/tex1.jpg',
+    url: 'tex/img1-q80.jpg',
     ar: [3000, 4000],
   }, {
-    url: 'images/tex2.jpg',
+    url: 'tex/img2-q80.jpg',
     ar: [3000, 4000],
   }, {
-    url: 'images/tex3.jpg',
+    url: 'tex/img3-q80.jpg',
     ar: [3000, 4000],
   }
-], amount = texturesArray.length;
+],
+  { length: amount, [amount - 1]: lastEl } = texturesArray;
 
 let clicks = 0;
 
-const onClickEv = () => switchTextures();
-const onLoadEv = () => switchTextures();
+/**
+ * Check if the current number is the end-of-queue.
+ *
+ * @param {number} currVal Current value
+ * @param {number} maxVal Maximum value
+ * @return {Promise<number>} The current number
+ */
+const isEndOfQueue = (currVal, maxVal) => {
+  return new Promise((resolve, reject) => {
+    if (currVal >= maxVal - 1) {
+      resolve(currVal);
+    } else {
+      reject(currVal);
+    }
+  });
+};
 
+// Initially set the image as a texture
+const onLoadEv = () => switchTextures();
+// Update image on click
+const onClickEv = () => switchTextures();
+
+// Create handlers
 doc.addEventListener('click', onClickEv, false);
+
 win.addEventListener('load', onLoadEv, false);
+win.addEventListener('resize', resize, false);
 
 /**
- * Switch between different textures
- * @param {*} num (Integer) to pick texture from array by
- * @param {*} vars
- * If the images unequal in dimensions — set false, true by default
- * @usage switchTextures({ isEqualInSize: false });
+ * @typedef {Object} texSwitchProps
+ * Texture-switching options.
+ *
+ * Indicates whether images in {@linkcode texturesArray} are:
+ * 1. Same in dimensions
+ * 2. Diff in sizes
+ * 3. Diff in aspect ratios
+ *
+ * @prop {boolean} hasEqualDims - Is all textures have the equal dimensions.
+ * It is initially true.
+ * @prop {boolean} hasDiffSizes - Is all textures differ in sizes.
+ * It is initially false.
+ * @prop {boolean} hasDiffRatio - Is all textures differ in aspect ratios.
+ * It is initially false.
+ * @prop {boolean} isLooped - Is a continuous sequence of images.
+ * It is initially true.
  */
-function switchTextures(num = 0, vars = {}) {
-  let { isEqualInSize } = vars;
-  isEqualInSize = true;
+
+/**
+ * Switch between different textures.
+ * @class
+ * @classdesc Sequential loop/cycling between images using a {@linkcode num} that increases per-click.
+ *
+ * @param {number} [num=0] Input value to {@linkcode pickTexture} from.
+ * @param {texSwitchProps} props Texture switching options.
+ *
+ * @example <caption>The default state</caption>
+ * switchTextures({ hasEqualDims: true });
+ * @example <caption>The negation of {@linkcode hasEqualDims} and vice versa</caption>
+ * switchTextures({ hasDiffSizes: true });
+ * @example <caption>Resizes images relative to the texture's aspect ratio</caption>
+ * switchTextures({ hasDiffRatio: true });
+ *
+ * @todo Implement variations w/ next/previous controls and autoplay.
+ */
+function switchTextures(num = 0, props = {}) {
+  // Properties added by default to a new instance
+  let { hasEqualDims, hasDiffSizes, isLooped } = props;
+
+  // If options are not specified
+  if (Object.entries(props).length == 0) {
+    hasEqualDims = true;
+    hasDiffSizes = false;
+    isLooped = true;
+  }
 
   // Increment a number by triggering
-  num = clicks++;
-  // Reset incrementor
-  if (num >= amount - 1) clicks = 0;
-  // Pick texture by ordinal number
-  let url = `images/tex${(num)}.jpg`;
+  if (Number.isInteger(num)) num = clicks++;
 
-  if (!isEqualInSize) {
-    texturesArray.map((tex, idx, arr) => {
-      if (num == idx) {
-        imageSize.w = tex.ar[0];
-        imageSize.h = tex.ar[1];
+  isEndOfQueue(num, amount)
+    .then(() => {
+      // Reset incrementor at the end of loop
+      clicks = 0;
+      doc.removeEventListener('click', onClickEv, false);
+    })
+    .finally(() => {
+      if (isLooped) doc.addEventListener('click', onClickEv, false);
+    });
+
+  if (!hasEqualDims || hasDiffSizes) {
+    // Texture dimensions needs update per-image load
+    const upd = texturesArray.map((img, idx, arr) => {
+      if (num == idx && arr.includes(img.ar)) {
+        imageSize.w = img.ar[0];
+        imageSize.h = img.ar[1];
       }
       resize();
     });
   }
 
-  pickTexture(url);
+  try {
+    // Pick image by index
+    let struct = {
+      path: 'tex',
+      name: 'img',
+      // index: num,
+      suffix: '-q80',
+      format: 'jpg',
+    };
+    pickTexture(assetURL(num, {...struct}));
+  } catch (e) {
+    // Could not load image from specified URL
+    // console.error(e);
+    alert(e.name + '\n' + e.message);
+  }
 }
 
 /**
- * @returns selected texture
+ * Get image natural/intrinsic dimensions for calc aspect ratio.
+ *
+ * @param {HTMLImageElement} el The img element.
+ * @returns {Object.<string, number>[]} Aspect ratios.
  */
-async function pickTexture(url) {
-  loadImage(url)
-    .then((img) => {resize();
-      img.onload = () => (texture.image = img);
-    })
-    .catch(error => error.message);
+const getImgAspectRatio = (el) => {
+  let {
+    width: w,
+    height: h,
+    naturalWidth: nw,
+    naturalHeight: nh
+  } = el;
+
+  let ar = [{
+    portrait: (w/h),
+    landscape: (h/w),
+  }, {
+    portrait: (nw/nh),
+    landscape: (nh/nw),
+  }];
+
+  return ar;
 }
 
-async function loadImage(url) {
+// Create image load handler
+const imgOnLoadEv = (ev) => getImgAspectRatio(ev.currentTarget);
+
+/**
+ * Apply the received image as a WebGL texture.
+ *
+ * @async
+ * @function pickTexture
+ * @param {string} query The URL to load media resource from.
+ * @return Selected texture.
+ */
+async function pickTexture(query) {
+  const texImage = await createImage()
+    .then((img) => {
+      // Applying the received image as a texture
+      img
+        .onload = () => (texture.image = img)
+        .onerror = (e) => (console.error(e))
+        .removeEventListener('load', imgOnLoadEv, false);
+
+      // Set address of the resource
+      img.src = query;
+    })
+    .catch(err => err?.message);
+
+  return texture.image;
+}
+
+/**
+ * @typedef {Object} imageProps
+ * A set of essential image attributes:
+ * 1. CORS mode — no credentials flag ('') is the same as 'anonmyous'
+ * 2. Referrer policy
+ * 2. Decoding hint
+ * 3. Loading deferral
+ *
+ * @prop {string=} cors - If the image download remotely from an external media hosting service
+ * @prop {string=} policy - Referrer policy for fetches initiated by the element
+ * @prop {string=} decode - Decoding hint for processing this image
+ * @prop {string=} load - Used when determining loading deferral
+ */
+
+/**
+ * Create node for load image resource w/ CORS mode.
+ *
+ * @async
+ * @function createImage
+ * @param {...imageProps} attrs A set of essential attributes.
+ * @returns The img element.
+ */
+async function createImage(...attrs) {
+  // Create image node
   let img = new Image();
 
-  img.crossOrigin = 'Anonymous';
-  img.decoding = 'async';
-  img.src = url;
+  // Create image load handler
+  img.addEventListener('load', imgOnLoadEv, false);
+  // img.onload = (ev) => ();
+  // img.error = (err) => ({name, message});
 
-  return img;
+  return {
+    crossOrigin: attrs.cors = 'anonmyous',
+    decoding: attrs.decode = 'async',
+    loading: attrs.load = 'eager',
+  } = img;
 }
 
 function resize() {
@@ -182,18 +356,18 @@ function resize() {
     a1 = 1;
     a2 = winAspectRatio / imgAspectRatio;
   } else {
-    a1 = (innerWidth / innerHeight) * imgAspectRatio;
+    a1 = (vw / vh) * imgAspectRatio;
     a2 = 1;
   }
   mesh.program.uniforms.res.value = new Vec4(
-    innerWidth,
-    innerHeight,
+    vw,
+    vh,
     a1,
     a2
   );
 
-  renderer.setSize(innerWidth, innerHeight);
-  aspect = innerWidth / innerHeight;
+  renderer.setSize(vw, vh);
+  aspect = vw / vh;
 }
 
 const program = new Program(gl, {
@@ -202,9 +376,7 @@ const program = new Program(gl, {
   uniforms: {
     uTime: { value: 0 },
     tWater: { value: texture },
-    res: {
-      value: new Vec4(innerWidth, innerHeight, a1, a2),
-    },
+    res: { value: new Vec4(vw, vh, a1, a2) },
     img: { value: new Vec2(imageSize.w, imageSize.h) },
     // Note that the uniform is applied w/o using an object and value property
     // This is b/c the class alternates this texture b/w two render targets
@@ -212,9 +384,9 @@ const program = new Program(gl, {
     tFlow: flowmap.uniform,
   },
 });
+
 const mesh = new Mesh(gl, { geometry, program });
 
-win.addEventListener('resize', resize, false);
 resize();
 
 // Create handlers to get mouse position and velocity
@@ -239,7 +411,7 @@ function updateMouse(e) {
     e.x = e.pageX;
     e.y = e.pageY;
   }
-  // Get mouse value in 0–1 range, w/ Y flipped
+  // Get mouse value in 0–1 range, w/ y flipped
   mouse.set(e.x / gl.renderer.width, 1.0 - e.y / gl.renderer.height);
   // Calculate velocity
   if (!lastTime) {
